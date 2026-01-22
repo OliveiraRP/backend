@@ -1,7 +1,9 @@
 import { pool } from "../config/db.js";
 
 export async function authMiddleware(req, res, next) {
-  const token = req.cookies.authToken;
+  const authHeader = req.headers.authorization;
+  const token =
+    req.cookies.authToken || (authHeader && authHeader.split(" ")[1]);
   if (!token) return res.status(401).json({ error: "Not authenticated" });
 
   try {
@@ -14,7 +16,6 @@ export async function authMiddleware(req, res, next) {
     req.userId = result.rows[0].id;
     next();
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Database error" });
   }
 }
