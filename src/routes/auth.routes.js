@@ -1,10 +1,9 @@
-import express from "express";
+import { Hono } from "hono";
 import { checkToken, getCurrentUser } from "../controllers/auth.controller.js";
-import { authMiddleware } from "../middlewares/auth.middleware.js";
 
-const router = express.Router();
+const router = new Hono();
 
 router.post("/check-token", checkToken);
-router.get("/me", authMiddleware, getCurrentUser);
+router.get("/me", getCurrentUser);
 
 export default router;

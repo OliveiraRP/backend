@@ -1,4 +1,4 @@
-import express from "express";
+import { Hono } from "hono";
 import {
   fetchTransactionById,
   fetchTransactionsByWallet,
@@ -7,15 +7,14 @@ import {
   editTransaction,
   removeTransaction,
 } from "../../controllers/budget-manager/transactions.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
 
-const router = express.Router();
+const router = new Hono();
 
-router.get("/", authMiddleware, fetchTransactionsByTimeframe);
-router.post("/", authMiddleware, addTransaction);
-router.get("/:id", authMiddleware, fetchTransactionById);
-router.put("/:id", authMiddleware, editTransaction);
-router.delete("/:id", authMiddleware, removeTransaction);
-router.get("/wallet/:walletId", authMiddleware, fetchTransactionsByWallet);
+router.get("/", fetchTransactionsByTimeframe);
+router.post("/", addTransaction);
+router.get("/:id", fetchTransactionById);
+router.put("/:id", editTransaction);
+router.delete("/:id", removeTransaction);
+router.get("/wallet/:walletId", fetchTransactionsByWallet);
 
 export default router;

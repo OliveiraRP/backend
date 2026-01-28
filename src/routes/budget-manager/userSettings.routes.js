@@ -1,9 +1,8 @@
-import express from "express";
+import { Hono } from "hono";
 import { fetchUserSettings } from "../../controllers/budget-manager/userSettings.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
 
-const router = express.Router();
+const router = new Hono();
 
-router.get("/", authMiddleware, fetchUserSettings);
+router.get("/", fetchUserSettings);
 
 export default router;

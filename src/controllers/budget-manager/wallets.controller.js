@@ -5,63 +5,76 @@ import {
   archiveWalletById,
   updateWalletById,
 } from "../../repositories/budget-manager/wallets.repository.js";
+import { getDb } from "../../config/db.js";
 
-export async function listWallets(req, res) {
+export async function listWallets(c) {
   try {
-    const wallets = await getWalletsByUser(req.userId);
-    res.json(wallets);
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const wallets = await getWalletsByUser(db, userId);
+    return c.json(wallets);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Database error" });
+    return c.json({ error: "Database error" }, 500);
   }
 }
 
-export async function getWallet(req, res) {
+export async function getWallet(c) {
   try {
-    const wallet = await getWalletById(req.params.id, req.userId);
-    if (!wallet) return res.status(404).json({ error: "Wallet not found" });
-    res.json(wallet);
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const walletId = c.req.param("id");
+    const wallet = await getWalletById(db, walletId, userId);
+    if (!wallet) return c.json({ error: "Wallet not found" }, 404);
+    return c.json(wallet);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Database error" });
+    return c.json({ error: "Database error" }, 500);
   }
 }
 
-export async function addWallet(req, res) {
+export async function addWallet(c) {
   try {
-    const newWallet = await createWallet(req.userId, req.body);
-    res.status(201).json(newWallet);
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const body = await c.req.json();
+    const newWallet = await createWallet(db, userId, body);
+    return c.json(newWallet, 201);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Could not create wallet" });
+    return c.json({ error: "Could not create wallet" }, 500);
   }
 }
 
-export async function archiveWallet(req, res) {
+export async function archiveWallet(c) {
   try {
-    const success = await archiveWalletById(req.params.id, req.userId);
-    if (!success) return res.status(404).json({ error: "Wallet not found" });
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const walletId = c.req.param("id");
+    const success = await archiveWalletById(db, walletId, userId);
+    if (!success) return c.json({ error: "Wallet not found" }, 404);
+    return c.json({ success: true });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Database error" });
+    return c.json({ error: "Database error" }, 500);
   }
 }
 
-export async function updateWallet(req, res) {
+export async function updateWallet(c) {
   try {
-    const updatedWallet = await updateWalletById(
-      req.params.id,
-      req.userId,
-      req.body
-    );
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const walletId = c.req.param("id");
+    const body = await c.req.json();
+    const updatedWallet = await updateWalletById(db, walletId, userId, body);
 
     if (!updatedWallet) {
-      return res.status(404).json({ error: "Wallet not found" });
+      return c.json({ error: "Wallet not found" }, 404);
     }
 
-    res.json(updatedWallet);
+    return c.json(updatedWallet);
   } catch (err) {
     console.error(err);
-    return res.status(500).json({ error: "Could not update wallet" });
+    return c.json({ error: "Could not update wallet" }, 500);
   }
 }

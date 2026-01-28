@@ -1,4 +1,4 @@
-import express from "express";
+import { Hono } from "hono";
 import {
   listWallets,
   getWallet,
@@ -6,11 +6,8 @@ import {
   updateWallet,
   archiveWallet,
 } from "../../controllers/budget-manager/wallets.controller.js";
-import { authMiddleware } from "../../middlewares/auth.middleware.js";
 
-const router = express.Router();
-
-router.use(authMiddleware);
+const router = new Hono();
 
 router.get("/", listWallets);
 router.post("/", addWallet);
