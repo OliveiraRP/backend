@@ -12,7 +12,7 @@ export async function getWalletsByUser(userId) {
      LEFT JOIN wallet_budget wb ON w.id = wb.wallet_id
      WHERE w.user_id = $1 AND w.archived = false
      ORDER BY w.id`,
-    [userId]
+    [userId],
   );
 
   return result.rows.map((row) => new Wallet(row));
@@ -28,7 +28,7 @@ export async function getWalletById(walletId, userId) {
      LEFT JOIN wallet_goal wg ON w.id = wg.wallet_id
      LEFT JOIN wallet_budget wb ON w.id = wb.wallet_id
      WHERE w.id = $1 AND w.user_id = $2`,
-    [walletId, userId]
+    [walletId, userId],
   );
 
   if (result.rows.length === 0) return null;
@@ -42,7 +42,7 @@ export async function createWallet(userId, walletData) {
     `INSERT INTO wallets (user_id, name, type, initial_balance, balance, include_net_worth, color, icon)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
      RETURNING *`,
-    [userId, name, type, balance, balance, includeInNetWorth, color, icon]
+    [userId, name, type, balance, balance, includeInNetWorth, color, icon],
   );
 
   return new Wallet(result.rows[0]);
@@ -54,42 +54,81 @@ export async function archiveWalletById(walletId, userId) {
      SET archived = true 
      WHERE id = $1 AND user_id = $2 
      RETURNING *`,
-    [walletId, userId]
+    [walletId, userId],
   );
   return result.rowCount > 0;
 }
 
 export async function updateWalletById(walletId, userId, walletData) {
-  const { name, includeNetWorth, color, icon, goal, annualBudget } = walletData;
+  const {
+    name,
+    initialBalance,
+    includeNetWorth,
+    color,
+    icon,
+    goal,
+    annualBudget,
+  } = walletData;
   const client = await pool.connect();
 
   try {
     await client.query("BEGIN");
 
-    const walletResult = await client.query(
-      `UPDATE wallets 
-       SET name = $1, icon = $2, color = $3, include_net_worth = $4
-       WHERE id = $5 AND user_id = $6 
-       RETURNING *`,
-      [name, icon, color, includeNetWorth, walletId, userId]
+    const currentWallet = await client.query(
+      `SELECT initial_balance FROM wallets WHERE id = $1 AND user_id = $2`,
+      [walletId, userId],
     );
 
-    if (walletResult.rows.length === 0) {
+    if (currentWallet.rows.length === 0) {
       await client.query("ROLLBACK");
       return null;
     }
 
+    const oldInitial = Number(currentWallet.rows[0].initial_balance);
+    const newInitial = Number(initialBalance);
+
+    const hasInitialChanged = Math.abs(newInitial - oldInitial) > 0.001;
+
+    let query;
+    let params;
+
+    if (hasInitialChanged) {
+      query = `UPDATE wallets 
+               SET name = $1, icon = $2, color = $3, include_net_worth = $4,
+                   balance = balance + ($5 - initial_balance), 
+                   initial_balance = $5
+               WHERE id = $6 AND user_id = $7 
+               RETURNING *`;
+      params = [
+        name,
+        icon,
+        color,
+        includeNetWorth,
+        newInitial,
+        walletId,
+        userId,
+      ];
+    } else {
+      query = `UPDATE wallets 
+               SET name = $1, icon = $2, color = $3, include_net_worth = $4
+               WHERE id = $5 AND user_id = $6 
+               RETURNING *`;
+      params = [name, icon, color, includeNetWorth, walletId, userId];
+    }
+
+    const walletResult = await client.query(query, params);
+
     if (goal !== undefined && goal !== null) {
       await client.query(
         `UPDATE wallet_goal SET goal = $1 WHERE wallet_id = $2`,
-        [goal, walletId]
+        [goal, walletId],
       );
     }
 
     if (annualBudget !== undefined && annualBudget !== null) {
       await client.query(
         `UPDATE wallet_budget SET annual_budget = $1 WHERE wallet_id = $2`,
-        [annualBudget, walletId]
+        [annualBudget, walletId],
       );
     }
 

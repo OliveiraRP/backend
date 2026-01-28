@@ -16,14 +16,16 @@ export async function checkToken(req, res) {
 
     const name = result.rows[0].name;
 
+    const isProd = env.nodeEnv === "production";
+
     res.cookie("authToken", token, {
       httpOnly: true,
-      secure: true,
-      sameSite: "none",
+      secure: isProd,
+      sameSite: isProd ? "none" : "lax",
       maxAge: 1000 * 60 * 60 * 24 * 90,
     });
 
-    res.json({ name });
+    res.json({ name, token });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: "Database error" });
@@ -31,17 +33,13 @@ export async function checkToken(req, res) {
 }
 
 export async function getCurrentUser(req, res) {
-  const token = req.cookies.authToken;
-
-  if (!token) return res.status(401).json({ error: "Not authenticated" });
-
   try {
-    const result = await pool.query("SELECT name FROM users WHERE token = $1", [
-      token,
+    const result = await pool.query("SELECT name FROM users WHERE id = $1", [
+      req.userId,
     ]);
 
     if (result.rows.length === 0) {
-      return res.status(401).json({ error: "Invalid token" });
+      return res.status(401).json({ error: "User not found" });
     }
 
     res.json({ name: result.rows[0].name });
