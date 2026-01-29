@@ -4,52 +4,62 @@ import {
   getAllCategoryGroups,
   createCategoryGroup,
 } from "../../repositories/budget-manager/categories.repository.js";
+import { getDb } from "../../config/db.js";
 
-export async function fetchAllCategories(req, res) {
+export async function fetchAllCategories(c) {
   try {
-    const categories = await getAllCategories(req.userId);
-    res.json(categories);
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const categories = await getAllCategories(db, userId);
+    return c.json(categories);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to fetch categories" });
+    return c.json({ error: "Failed to fetch categories" }, 500);
   }
 }
 
-export async function fetchCategoryGroups(req, res) {
+export async function fetchCategoryGroups(c) {
   try {
-    const groups = await getAllCategoryGroups(req.userId);
-    res.json(groups);
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const groups = await getAllCategoryGroups(db, userId);
+    return c.json(groups);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch groups" });
+    return c.json({ error: "Failed to fetch groups" }, 500);
   }
 }
 
-export async function createNewCategory(req, res) {
+export async function createNewCategory(c) {
   try {
-    const { category_group_id, name, icon, excludeFromOverview } = req.body;
-    const category = await createCategory(req.userId, {
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const { category_group_id, name, icon, excludeFromOverview } =
+      await c.req.json();
+    const category = await createCategory(db, userId, {
       category_group_id,
       name,
       icon,
       excludeFromOverview,
     });
-    res.status(201).json(category);
+    return c.json(category, 201);
   } catch (err) {
-    res.status(500).json({ error: "Failed to create category" });
+    return c.json({ error: "Failed to create category" }, 500);
   }
 }
 
-export async function createNewCategoryGroup(req, res) {
+export async function createNewCategoryGroup(c) {
   try {
-    const { name, type, color } = req.body;
-    const group = await createCategoryGroup(req.userId, {
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const { name, type, color } = await c.req.json();
+    const group = await createCategoryGroup(db, userId, {
       name,
       type,
       color,
     });
-    res.status(201).json(group);
+    return c.json(group, 201);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: "Failed to create category group" });
+    return c.json({ error: "Failed to create category group" }, 500);
   }
 }

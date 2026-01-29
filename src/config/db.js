@@ -1,19 +1,11 @@
-import pkg from "pg";
+import { Pool, neonConfig } from "@neondatabase/serverless";
 
-const { Pool } = pkg;
+export function getDb(c) {
+  neonConfig.webSocketConstructor = WebSocket;
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  neonConfig.wsProxy = undefined;
 
-  ssl: {
-    rejectUnauthorized: false,
-  },
-});
+  const pool = new Pool({ connectionString: c.env.DATABASE_URL });
 
-pool.on("connect", () => {
-  console.log("Connected to Supabase PostgreSQL");
-});
-
-pool.on("error", (err) => {
-  console.error("Unexpected error on idle client", err);
-});
+  return pool;
+}

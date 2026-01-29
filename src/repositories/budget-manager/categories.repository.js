@@ -1,7 +1,5 @@
-import { pool } from "../../config/db.js";
-
-export async function getAllCategories(userId) {
-  const result = await pool.query(
+export async function getAllCategories(sql, userId) {
+  const result = await sql.query(
     `SELECT 
         c.id,
         c.category_group_id,
@@ -21,8 +19,8 @@ export async function getAllCategories(userId) {
   return result.rows;
 }
 
-export async function getAllCategoryGroups(userId) {
-  const result = await pool.query(
+export async function getAllCategoryGroups(sql, userId) {
+  const result = await sql.query(
     `SELECT id, name, type, color FROM category_groups WHERE user_id = $1 ORDER BY name ASC`,
     [userId]
   );
@@ -30,10 +28,11 @@ export async function getAllCategoryGroups(userId) {
 }
 
 export async function createCategory(
+  sql,
   userId,
   { category_group_id, name, icon, excludeFromOverview }
 ) {
-  const result = await pool.query(
+  const result = await sql.query(
     `INSERT INTO categories (category_group_id, name, icon, exclude_from_overview)
      VALUES ($1, $2, $3, $4)
      RETURNING *`,
@@ -42,8 +41,8 @@ export async function createCategory(
   return result.rows[0];
 }
 
-export async function createCategoryGroup(userId, { name, type, color }) {
-  const result = await pool.query(
+export async function createCategoryGroup(sql, userId, { name, type, color }) {
+  const result = await sql.query(
     `INSERT INTO category_groups (user_id, name, type, color)
      VALUES ($1, $2, $3, $4)
      RETURNING id, name, type, color`,
