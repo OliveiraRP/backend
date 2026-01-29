@@ -1,10 +1,13 @@
 import { getUserSettings } from "../../repositories/budget-manager/userSettings.repository.js";
+import { getDb } from "../../config/db.js";
 
-export async function fetchUserSettings(req, res) {
+export async function fetchUserSettings(c) {
   try {
-    const settings = await getUserSettings(req.userId);
-    res.json(settings);
+    const db = getDb(c);
+    const userId = c.get("jwtPayload").id;
+    const settings = await getUserSettings(db, userId);
+    return c.json(settings);
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch settings" });
+    return c.json({ error: "Failed to fetch settings" }, 500);
   }
 }
