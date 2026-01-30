@@ -34,7 +34,7 @@ export async function checkToken(c) {
       httpOnly: true,
       maxAge: 60 * 60 * 24 * 365,
       secure: isProd,
-      sameSite: isProd ? "None" : "Lax",
+      sameSite: "Lax",
       domain: isProd ? ".houseofrafa.site" : undefined,
     });
 

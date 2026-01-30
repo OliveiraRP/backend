@@ -4,8 +4,8 @@ export async function getTransactionById(sql, transactionId, userId) {
   const result = await sql.query(
     `SELECT 
         t.*,
-        ti.wallet_id AS wallet_id,
-        te.wallet_id AS wallet_id,
+        ti.wallet_id AS income_wallet,
+        te.wallet_id AS expense_wallet,
         tt.from_wallet_id,
         tt.to_wallet_id
      FROM transactions t
@@ -13,7 +13,7 @@ export async function getTransactionById(sql, transactionId, userId) {
      LEFT JOIN transaction_expense te ON t.id = te.transaction_id
      LEFT JOIN transaction_transfer tt ON t.id = tt.transaction_id
      WHERE t.id = $1 AND t.user_id = $2`,
-    [transactionId, userId]
+    [transactionId, userId],
   );
 
   if (result.rows.length === 0) return null;
@@ -49,7 +49,7 @@ export async function getTransactionsByWallet(sql, walletId, userId) {
         tt.to_wallet_id = $1
      )
      ORDER BY t.date DESC, t.id DESC`,
-    [walletId, userId]
+    [walletId, userId],
   );
 
   return result.rows.map((row) => new Transaction(row));
@@ -59,7 +59,7 @@ export async function getTransactionsByTimeframe(
   sql,
   userId,
   startDate,
-  endDate
+  endDate,
 ) {
   let query = `
     SELECT 
@@ -94,8 +94,9 @@ export async function getTransactionsByTimeframe(
 }
 
 export async function createTransaction(sql, userId, data) {
-  return await sql.transaction(async (tx) => {
-    const mainRes = await tx.query(
+  await sql.query("BEGIN");
+  try {
+    const mainRes = await sql.query(
       `INSERT INTO transactions (user_id, amount, date, description, category_id, type, exclude_from_wallet)
        VALUES ($1, $2, $3, $4, $5, $6, $7)
        RETURNING id`,
@@ -107,50 +108,55 @@ export async function createTransaction(sql, userId, data) {
         data.categoryId,
         data.type,
         data.excludeFromWallet || false,
-      ]
+      ],
     );
     const transactionId = mainRes.rows[0].id;
 
     if (data.type === "expense") {
-      await tx.query(
+      await sql.query(
         "INSERT INTO transaction_expense (transaction_id, wallet_id) VALUES ($1, $2)",
-        [transactionId, data.walletId]
+        [transactionId, data.walletId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2 AND user_id = $3",
-        [data.amount, data.walletId, userId]
+        [data.amount, data.walletId, userId],
       );
     } else if (data.type === "income") {
-      await tx.query(
+      await sql.query(
         "INSERT INTO transaction_income (transaction_id, wallet_id) VALUES ($1, $2)",
-        [transactionId, data.walletId]
+        [transactionId, data.walletId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2 AND user_id = $3",
-        [data.amount, data.walletId, userId]
+        [data.amount, data.walletId, userId],
       );
     } else if (data.type === "transfer") {
-      await tx.query(
+      await sql.query(
         "INSERT INTO transaction_transfer (transaction_id, from_wallet_id, to_wallet_id) VALUES ($1, $2, $3)",
-        [transactionId, data.fromWalletId, data.toWalletId]
+        [transactionId, data.fromWalletId, data.toWalletId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2 AND user_id = $3",
-        [data.amount, data.fromWalletId, userId]
+        [data.amount, data.fromWalletId, userId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2 AND user_id = $3",
-        [data.amount, data.toWalletId, userId]
+        [data.amount, data.toWalletId, userId],
       );
     }
 
+    await sql.query("COMMIT");
     return { id: transactionId, ...data };
-  });
+  } catch (err) {
+    await sql.query("ROLLBACK");
+    throw err;
+  }
 }
 
 export async function updateTransaction(sql, userId, transactionId, data) {
-  return await sql.transaction(async (tx) => {
-    const oldTxRes = await tx.query(
+  await sql.query("BEGIN");
+  try {
+    const oldTxRes = await sql.query(
       `SELECT t.*, ti.wallet_id as income_wallet, te.wallet_id as expense_wallet, 
               tt.from_wallet_id, tt.to_wallet_id
        FROM transactions t
@@ -158,34 +164,34 @@ export async function updateTransaction(sql, userId, transactionId, data) {
        LEFT JOIN transaction_expense te ON t.id = te.transaction_id
        LEFT JOIN transaction_transfer tt ON t.id = tt.transaction_id
        WHERE t.id = $1 AND t.user_id = $2`,
-      [transactionId, userId]
+      [transactionId, userId],
     );
 
     if (oldTxRes.rows.length === 0) throw new Error("Transaction not found");
     const old = oldTxRes.rows[0];
 
     if (old.type === "expense") {
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2",
-        [old.amount, old.expense_wallet]
+        [old.amount, old.expense_wallet],
       );
     } else if (old.type === "income") {
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2",
-        [old.amount, old.income_wallet]
+        [old.amount, old.income_wallet],
       );
     } else if (old.type === "transfer") {
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2",
-        [old.amount, old.from_wallet_id]
+        [old.amount, old.from_wallet_id],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2",
-        [old.amount, old.to_wallet_id]
+        [old.amount, old.to_wallet_id],
       );
     }
 
-    await tx.query(
+    await sql.query(
       `UPDATE transactions 
        SET amount = $1, date = $2, description = $3, category_id = $4, type = $5, exclude_from_wallet = $6
        WHERE id = $7`,
@@ -197,61 +203,67 @@ export async function updateTransaction(sql, userId, transactionId, data) {
         data.type,
         data.excludeFromWallet,
         transactionId,
-      ]
+      ],
     );
 
-    await tx.query(
+    await sql.query(
       "DELETE FROM transaction_expense WHERE transaction_id = $1",
-      [transactionId]
+      [transactionId],
     );
-    await tx.query("DELETE FROM transaction_income WHERE transaction_id = $1", [
-      transactionId,
-    ]);
-    await tx.query(
+    await sql.query(
+      "DELETE FROM transaction_income WHERE transaction_id = $1",
+      [transactionId],
+    );
+    await sql.query(
       "DELETE FROM transaction_transfer WHERE transaction_id = $1",
-      [transactionId]
+      [transactionId],
     );
 
     if (data.type === "expense") {
-      await tx.query(
+      await sql.query(
         "INSERT INTO transaction_expense (transaction_id, wallet_id) VALUES ($1, $2)",
-        [transactionId, data.walletId]
+        [transactionId, data.walletId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2",
-        [data.amount, data.walletId]
+        [data.amount, data.walletId],
       );
     } else if (data.type === "income") {
-      await tx.query(
+      await sql.query(
         "INSERT INTO transaction_income (transaction_id, wallet_id) VALUES ($1, $2)",
-        [transactionId, data.walletId]
+        [transactionId, data.walletId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2",
-        [data.amount, data.walletId]
+        [data.amount, data.walletId],
       );
     } else if (data.type === "transfer") {
-      await tx.query(
+      await sql.query(
         "INSERT INTO transaction_transfer (transaction_id, from_wallet_id, to_wallet_id) VALUES ($1, $2, $3)",
-        [transactionId, data.fromWalletId, data.toWalletId]
+        [transactionId, data.fromWalletId, data.toWalletId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2",
-        [data.amount, data.fromWalletId]
+        [data.amount, data.fromWalletId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2",
-        [data.amount, data.toWalletId]
+        [data.amount, data.toWalletId],
       );
     }
 
+    await sql.query("COMMIT");
     return { id: transactionId, ...data };
-  });
+  } catch (err) {
+    await sql.query("ROLLBACK");
+    throw err;
+  }
 }
 
 export async function deleteTransaction(sql, userId, transactionId) {
-  return await sql.transaction(async (tx) => {
-    const txRes = await tx.query(
+  await sql.query("BEGIN");
+  try {
+    const txRes = await sql.query(
       `SELECT t.*, ti.wallet_id as income_wallet, te.wallet_id as expense_wallet, 
               tt.from_wallet_id, tt.to_wallet_id
        FROM transactions t
@@ -259,49 +271,54 @@ export async function deleteTransaction(sql, userId, transactionId) {
        LEFT JOIN transaction_expense te ON t.id = te.transaction_id
        LEFT JOIN transaction_transfer tt ON t.id = tt.transaction_id
        WHERE t.id = $1 AND t.user_id = $2`,
-      [transactionId, userId]
+      [transactionId, userId],
     );
 
     if (txRes.rows.length === 0) throw new Error("Transaction not found");
     const transaction = txRes.rows[0];
 
     if (transaction.type === "expense") {
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2 AND user_id = $3",
-        [transaction.amount, transaction.expense_wallet, userId]
+        [transaction.amount, transaction.expense_wallet, userId],
       );
     } else if (transaction.type === "income") {
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2 AND user_id = $3",
-        [transaction.amount, transaction.income_wallet, userId]
+        [transaction.amount, transaction.income_wallet, userId],
       );
     } else if (transaction.type === "transfer") {
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance + $1 WHERE id = $2 AND user_id = $3",
-        [transaction.amount, transaction.from_wallet_id, userId]
+        [transaction.amount, transaction.from_wallet_id, userId],
       );
-      await tx.query(
+      await sql.query(
         "UPDATE wallets SET balance = balance - $1 WHERE id = $2 AND user_id = $3",
-        [transaction.amount, transaction.to_wallet_id, userId]
+        [transaction.amount, transaction.to_wallet_id, userId],
       );
     }
 
-    await tx.query(
+    await sql.query(
       "DELETE FROM transaction_expense WHERE transaction_id = $1",
-      [transactionId]
+      [transactionId],
     );
-    await tx.query("DELETE FROM transaction_income WHERE transaction_id = $1", [
-      transactionId,
-    ]);
-    await tx.query(
+    await sql.query(
+      "DELETE FROM transaction_income WHERE transaction_id = $1",
+      [transactionId],
+    );
+    await sql.query(
       "DELETE FROM transaction_transfer WHERE transaction_id = $1",
-      [transactionId]
+      [transactionId],
     );
-    await tx.query("DELETE FROM transactions WHERE id = $1 AND user_id = $2", [
+    await sql.query("DELETE FROM transactions WHERE id = $1 AND user_id = $2", [
       transactionId,
       userId,
     ]);
 
+    await sql.query("COMMIT");
     return true;
-  });
+  } catch (err) {
+    await sql.query("ROLLBACK");
+    throw err;
+  }
 }
