@@ -55,48 +55,22 @@ export async function archiveWalletById(sql, walletId, userId) {
 }
 
 export async function updateWalletById(sql, walletId, userId, walletData) {
-  const {
-    name,
-    initialBalance,
-    includeNetWorth,
-    color,
-    icon,
-    goal,
-    annualBudget,
-  } = walletData;
+  const { name, balance, includeNetWorth, color, icon, goal, annualBudget } =
+    walletData;
 
   await sql.query("BEGIN");
   try {
-    const currentWallet = await sql.query(
-      `SELECT initial_balance FROM wallets WHERE id = $1 AND user_id = $2`,
-      [walletId, userId],
+    const walletUpdate = await sql.query(
+      `UPDATE wallets 
+       SET name = $1, icon = $2, color = $3, include_net_worth = $4, balance = $5
+       WHERE id = $6 AND user_id = $7
+       RETURNING id`,
+      [name, icon, color, includeNetWorth, balance, walletId, userId],
     );
 
-    if (currentWallet.rows.length === 0) {
+    if (walletUpdate.rows.length === 0) {
       await sql.query("ROLLBACK");
       return null;
-    }
-
-    const oldInitial = Number(currentWallet.rows[0].initial_balance);
-    const newInitial = Number(initialBalance);
-    const hasInitialChanged = Math.abs(newInitial - oldInitial) > 0.001;
-
-    if (hasInitialChanged) {
-      await sql.query(
-        `UPDATE wallets 
-         SET name = $1, icon = $2, color = $3, include_net_worth = $4,
-             balance = balance + ($5 - initial_balance), 
-             initial_balance = $5
-         WHERE id = $6 AND user_id = $7`,
-        [name, icon, color, includeNetWorth, newInitial, walletId, userId],
-      );
-    } else {
-      await sql.query(
-        `UPDATE wallets 
-         SET name = $1, icon = $2, color = $3, include_net_worth = $4
-         WHERE id = $5 AND user_id = $6`,
-        [name, icon, color, includeNetWorth, walletId, userId],
-      );
     }
 
     if (goal !== undefined && goal !== null) {
