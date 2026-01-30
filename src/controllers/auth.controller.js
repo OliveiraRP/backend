@@ -32,10 +32,10 @@ export async function checkToken(c) {
     setCookie(c, "authToken", jwtToken, {
       path: "/",
       httpOnly: true,
-      maxAge: 60 * 60 * 24 * 90,
+      maxAge: 60 * 60 * 24 * 365,
       secure: isProd,
       sameSite: isProd ? "None" : "Lax",
-      // domain: isProd ? ".[TODO: Define domain].com" : undefined,
+      domain: isProd ? ".houseofrafa.site" : undefined,
     });
 
     return c.json({ name: user.name });
